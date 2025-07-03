@@ -30,8 +30,8 @@ class TwitterSupporterAnalyzer:
         except FileNotFoundError:
             return []
     
-    def get_viral_tweets(self, days_back=3):
-        """バイラルツイートを収集"""
+    def get_viral_tweets(self, days_back=7):
+        """バイラルツイートを収集（最新から優先）"""
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days_back)
         
@@ -39,35 +39,39 @@ class TwitterSupporterAnalyzer:
         
         for account in self.supporter_accounts:
             try:
-                # ユーザーのツイートを取得（制限回避のため少なめに）
-                tweets = tweepy.Paginator(
-                    self.twitter_client.get_users_tweets,
+                # 最新のツイートから取得（時系列順）
+                tweets = self.twitter_client.get_users_tweets(
                     id=account['user_id'],
+                    start_time=start_time,
+                    end_time=end_time,
                     tweet_fields=['public_metrics', 'created_at', 'author_id'],
-                    max_results=10
-                ).flatten(limit=50)
+                    max_results=100  # 最新100件を取得
+                )
                 
-                for tweet in tweets:
-                    metrics = tweet.public_metrics
-                    # バイラル判定（いいね10以上 または RT5以上）
-                    if metrics['like_count'] >= 10 or metrics['retweet_count'] >= 5:
-                        viral_tweets.append({
-                            'account_name': account['name'],
-                            'username': account['username'],
-                            'tweet_id': tweet.id,
-                            'text': tweet.text,
-                            'created_at': tweet.created_at,
-                            'likes': metrics['like_count'],
-                            'retweets': metrics['retweet_count'],
-                            'replies': metrics['reply_count'],
-                            'url': f"https://twitter.com/{account['username']}/status/{tweet.id}"
-                        })
+                if tweets.data:
+                    # 最新のツイートから順番に処理
+                    for tweet in tweets.data:
+                        metrics = tweet.public_metrics
+                        # バイラル判定（いいね10以上 または RT5以上）
+                        if metrics['like_count'] >= 10 or metrics['retweet_count'] >= 5:
+                            viral_tweets.append({
+                                'account_name': account['name'],
+                                'username': account['username'],
+                                'tweet_id': tweet.id,
+                                'text': tweet.text,
+                                'created_at': tweet.created_at,
+                                'likes': metrics['like_count'],
+                                'retweets': metrics['retweet_count'],
+                                'replies': metrics['reply_count'],
+                                'url': f"https://twitter.com/{account['username']}/status/{tweet.id}"
+                            })
                         
             except Exception as e:
                 print(f"Error fetching tweets for {account['name']}: {e}")
                 continue
         
-        return sorted(viral_tweets, key=lambda x: x['likes'] + x['retweets'], reverse=True)
+        # 最新の投稿順にソート（作成日時が新しい順）
+        return sorted(viral_tweets, key=lambda x: x['created_at'], reverse=True)
     
     def analyze_tweets_with_ai(self, tweets):
         """AIでツイートを分析・要約"""
