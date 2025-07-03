@@ -47,18 +47,21 @@ jobs:
       
     - name: Update index page
       run: |
-        echo "# ソーシャルメディア分析" > index.md
+        echo "# ソーシャルメディア分析ダッシュボード" > index.md
         echo "" >> index.md
-        echo "## 最新レポート" >> index.md
+        echo "## 📅 日別レポート（最新10件）" >> index.md
         echo "" >> index.md
         if ls reports/*.md 1> /dev/null 2>&1; then
           ls -t reports/*.md | head -10 | while read file; do
             date=$(basename "$file" .md | sed 's/report_//')
-            echo "- [$date]($file)" >> index.md
+            echo "- [📊 $date のレポート]($file)" >> index.md
           done
         else
           echo "レポートを生成中..." >> index.md
         fi
+        echo "" >> index.md
+        echo "---" >> index.md
+        echo "*6時間ごとに自動更新（0時、6時、12時、18時）*" >> index.md
         
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
