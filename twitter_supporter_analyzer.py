@@ -30,30 +30,102 @@ class TwitterSupporterAnalyzer:
         except FileNotFoundError:
             return []
     
-    def get_viral_tweets(self, days_back=7):
-        """バイラルツイートを収集（最新から優先）"""
+    def search_keyword_tweets(self, days_back=3):
+        """キーワード検索でツイートを収集"""
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days_back)
         
+        search_keywords = [
+            '山田太郎 議員',
+            '山田太郎 参議院', 
+            '表現の自由 山田',
+            '著作権 山田太郎',
+            'クリエイター 山田太郎',
+            'DX 山田太郎',
+            '非実在 山田太郎',
+            '児ポ 山田太郎'
+        ]
+        
         viral_tweets = []
+        
+        for keyword in search_keywords:
+            try:
+                print(f"検索中: {keyword}")
+                # キーワード検索
+                tweets = tweepy.Paginator(
+                    self.twitter_client.search_recent_tweets,
+                    query=f'"{keyword}" -is:retweet lang:ja',
+                    start_time=start_time,
+                    end_time=end_time,
+                    tweet_fields=['public_metrics', 'created_at', 'author_id'],
+                    user_fields=['username', 'name'],
+                    expansions=['author_id'],
+                    max_results=10
+                ).flatten(limit=50)
+                
+                for tweet in tweets:
+                    metrics = tweet.public_metrics
+                    # 注目ツイート判定（いいね2以上 または RT1以上）
+                    if metrics['like_count'] >= 2 or metrics['retweet_count'] >= 1:
+                        # ユーザー情報を取得
+                        user = next((user for user in tweets.includes['users'] if user.id == tweet.author_id), None)
+                        username = user.username if user else 'unknown'
+                        name = user.name if user else 'Unknown User'
+                        
+                        viral_tweets.append({
+                            'account_name': name,
+                            'username': username,
+                            'tweet_id': tweet.id,
+                            'text': tweet.text,
+                            'created_at': tweet.created_at,
+                            'likes': metrics['like_count'],
+                            'retweets': metrics['retweet_count'],
+                            'replies': metrics['reply_count'],
+                            'url': f"https://twitter.com/{username}/status/{tweet.id}",
+                            'search_keyword': keyword
+                        })
+                        
+            except Exception as e:
+                print(f"Error searching for {keyword}: {e}")
+                continue
+        
+        # 重複を削除（同じtweet_idは除外）
+        seen_ids = set()
+        unique_tweets = []
+        for tweet in viral_tweets:
+            if tweet['tweet_id'] not in seen_ids:
+                seen_ids.add(tweet['tweet_id'])
+                unique_tweets.append(tweet)
+        
+        # エンゲージメント順にソート
+        return sorted(unique_tweets, key=lambda x: x['likes'] + x['retweets'], reverse=True)
+
+    def get_viral_tweets(self, days_back=7):
+        """従来の方法（アカウント指定）とキーワード検索を併用"""
+        viral_tweets = []
+        
+        # 1. キーワード検索でツイート収集
+        keyword_tweets = self.search_keyword_tweets(days_back=3)
+        viral_tweets.extend(keyword_tweets)
+        
+        # 2. 指定アカウントからも収集（従来の方法）
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=days_back)
         
         for account in self.supporter_accounts:
             try:
-                # 最新のツイートから取得（時系列順）
                 tweets = self.twitter_client.get_users_tweets(
                     id=account['user_id'],
                     start_time=start_time,
                     end_time=end_time,
                     tweet_fields=['public_metrics', 'created_at', 'author_id'],
-                    max_results=100  # 最新100件を取得
+                    max_results=50
                 )
                 
                 if tweets.data:
-                    # 最新のツイートから順番に処理
                     for tweet in tweets.data:
                         metrics = tweet.public_metrics
-                        # 注目ツイート判定（いいね3以上 または RT2以上 または 返信5以上）
-                        if metrics['like_count'] >= 3 or metrics['retweet_count'] >= 2 or metrics['reply_count'] >= 5:
+                        if metrics['like_count'] >= 1 or metrics['retweet_count'] >= 1:
                             viral_tweets.append({
                                 'account_name': account['name'],
                                 'username': account['username'],
@@ -63,15 +135,24 @@ class TwitterSupporterAnalyzer:
                                 'likes': metrics['like_count'],
                                 'retweets': metrics['retweet_count'],
                                 'replies': metrics['reply_count'],
-                                'url': f"https://twitter.com/{account['username']}/status/{tweet.id}"
+                                'url': f"https://twitter.com/{account['username']}/status/{tweet.id}",
+                                'search_keyword': '指定アカウント'
                             })
                         
             except Exception as e:
                 print(f"Error fetching tweets for {account['name']}: {e}")
                 continue
         
-        # 最新の投稿順にソート（作成日時が新しい順）
-        return sorted(viral_tweets, key=lambda x: x['created_at'], reverse=True)
+        # 重複を削除
+        seen_ids = set()
+        unique_tweets = []
+        for tweet in viral_tweets:
+            if tweet['tweet_id'] not in seen_ids:
+                seen_ids.add(tweet['tweet_id'])
+                unique_tweets.append(tweet)
+        
+        # 最新の投稿順にソート
+        return sorted(unique_tweets, key=lambda x: x['created_at'], reverse=True)
     
     def filter_relevant_tweets(self, tweets):
         """山田太郎議員関連キーワードでツイートをフィルタリング"""
@@ -153,14 +234,24 @@ class TwitterSupporterAnalyzer:
     
     def generate_report(self):
         """レポートを生成"""
-        print("バイラルツイートを収集中...")
+        print("キーワード検索でツイートを収集中...")
         viral_tweets = self.get_viral_tweets()
         
-        print(f"{len(viral_tweets)}件のバイラルツイートを発見")
+        print(f"{len(viral_tweets)}件のツイートを発見")
         
         # 関連ツイートをフィルタリング
         relevant_tweets = self.filter_relevant_tweets(viral_tweets)
         print(f"山田太郎議員関連: {len(relevant_tweets)}件")
+        
+        # キーワード別の内訳を表示
+        keyword_counts = {}
+        for tweet in viral_tweets:
+            keyword = tweet.get('search_keyword', 'その他')
+            keyword_counts[keyword] = keyword_counts.get(keyword, 0) + 1
+        
+        print("キーワード別件数:")
+        for keyword, count in keyword_counts.items():
+            print(f"  {keyword}: {count}件")
         
         print("AI分析を実行中...")
         analysis = self.analyze_tweets_with_ai(viral_tweets)
@@ -188,9 +279,10 @@ class TwitterSupporterAnalyzer:
         display_tweets = relevant_tweets[:10] if relevant_tweets else viral_tweets[:10]
         for tweet in display_tweets:
             relevance_info = f"🎯**{tweet.get('relevance_score', 0)}点** " if 'relevance_score' in tweet else ""
+            keyword_info = f"📍 `{tweet.get('search_keyword', 'その他')}`"
             report_content += f"""
 ### 📱 [{tweet['account_name']}]({tweet['url']}) {relevance_info}
-**👍{tweet['likes']} 🔄{tweet['retweets']} 💬{tweet['replies']}** | {tweet['created_at'].strftime('%m/%d %H:%M')}
+**👍{tweet['likes']} 🔄{tweet['retweets']} 💬{tweet['replies']}** | {tweet['created_at'].strftime('%m/%d %H:%M')} | {keyword_info}
 
 > {tweet['text']}
 
