@@ -52,8 +52,8 @@ class TwitterSupporterAnalyzer:
                     # 最新のツイートから順番に処理
                     for tweet in tweets.data:
                         metrics = tweet.public_metrics
-                        # バイラル判定（いいね10以上 または RT5以上）
-                        if metrics['like_count'] >= 10 or metrics['retweet_count'] >= 5:
+                        # 注目ツイート判定（いいね3以上 または RT2以上 または 返信5以上）
+                        if metrics['like_count'] >= 3 or metrics['retweet_count'] >= 2 or metrics['reply_count'] >= 5:
                             viral_tweets.append({
                                 'account_name': account['name'],
                                 'username': account['username'],
@@ -111,33 +111,34 @@ class TwitterSupporterAnalyzer:
             relevance = f"(関連度: {tweet.get('relevance_score', 0)})" if 'relevance_score' in tweet else ""
             tweet_texts.append(f"@{tweet['username']}: {tweet['text']} (👍{tweet['likes']} 🔄{tweet['retweets']}) {relevance}")
         
-        prompt = f"""以下は山田太郎議員に関連するバイラルツイートです。
-分野ごとに整理して、淡々とまとめてください。
+        prompt = f"""以下は山田太郎議員に関連するツイートです。
+手動チェックの効率化のため、重要なツイートを分野別に分類してリストアップしてください。
+要約は不要です。元のツイート内容をそのまま残して分類してください。
 
-## 分野別分析（該当するもののみ）
+## 分野別ツイート一覧
 
 ### 📝 表現の自由・規制関連
-- 該当ツイートの要約
+（該当ツイートを元の文章のまま箇条書き）
 
-### 💻 デジタル・IT政策
-- 該当ツイートの要約
+### 💻 デジタル・IT政策  
+（該当ツイートを元の文章のまま箇条書き）
 
 ### 🎨 クリエイター・コンテンツ
-- 該当ツイートの要約
+（該当ツイートを元の文章のまま箇条書き）
 
 ### ⚖️ 法案・政策提案
-- 該当ツイートの要約
+（該当ツイートを元の文章のまま箇条書き）
 
 ### 🗳️ 政治活動・選挙
-- 該当ツイートの要約
+（該当ツイートを元の文章のまま箇条書き）
 
 ### 📊 その他
-- その他の話題
+（該当ツイートを元の文章のまま箇条書き）
 
 ツイート一覧：
 {chr(10).join(tweet_texts)}
 
-各分野について、該当するツイートがある場合のみ記載し、簡潔にまとめてください。"""
+各ツイートを適切な分野に振り分けて、原文のまま表示してください。"""
 
         try:
             response = self.openai_client.chat.completions.create(
@@ -166,29 +167,36 @@ class TwitterSupporterAnalyzer:
         
         # レポート生成
         report_date = datetime.now().strftime('%Y-%m-%d')
-        report_content = f"""# 山田太郎議員関連ツイート分析レポート
+        report_content = f"""# 🔍 山田太郎議員関連ツイート拾い上げ
 ## {report_date}
 
-### 📊 サマリー
-- 🔍 バイラルツイート総数: {len(viral_tweets)}件
+### 📈 収集状況  
+- 📊 注目ツイート総数: {len(viral_tweets)}件
 - 🎯 関連ツイート: {len(relevant_tweets)}件
-- 📈 関連度の高いツイートを優先表示
+- 🚀 **リポスト・ウォッチ候補を効率的に発見**
 
 {analysis}
 
-## 🔥 関連度の高いバイラルツイート（詳細）
+---
+
+## 🔥 リポスト・ウォッチ候補ツイート
+*エンゲージメントが高い順に表示（クリックでXへ移動）*
+
 """
         
         # 関連度の高いツイートを優先表示
         display_tweets = relevant_tweets[:10] if relevant_tweets else viral_tweets[:10]
         for tweet in display_tweets:
-            relevance_info = f"- **🎯 関連度**: {tweet.get('relevance_score', 0)}点\n" if 'relevance_score' in tweet else ""
+            relevance_info = f"🎯**{tweet.get('relevance_score', 0)}点** " if 'relevance_score' in tweet else ""
             report_content += f"""
-### [{tweet['account_name']}](https://twitter.com/{tweet['username']})
-- **ツイート**: {tweet['text']}
-- **エンゲージメント**: 👍{tweet['likes']} 🔄{tweet['retweets']} 💬{tweet['replies']}
-{relevance_info}- **URL**: {tweet['url']}
-- **投稿時刻**: {tweet['created_at']}
+### 📱 [{tweet['account_name']}]({tweet['url']}) {relevance_info}
+**👍{tweet['likes']} 🔄{tweet['retweets']} 💬{tweet['replies']}** | {tweet['created_at'].strftime('%m/%d %H:%M')}
+
+> {tweet['text']}
+
+<blockquote class="twitter-tweet">
+<a href="{tweet['url']}">🔗 Xで原文を見る（リポスト可能）</a>
+</blockquote>
 
 ---
 """
