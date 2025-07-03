@@ -2,7 +2,7 @@ name: Daily Twitter Analysis
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # 6時間ごとに実行
+    - cron: '0 9,21 * * *'  # 1日2回（午前9時、午後9時JST）に実行
   workflow_dispatch:  # 手動実行も可能
     inputs:
       message:
