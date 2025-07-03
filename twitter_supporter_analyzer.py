@@ -73,23 +73,52 @@ class TwitterSupporterAnalyzer:
         # 最新の投稿順にソート（作成日時が新しい順）
         return sorted(viral_tweets, key=lambda x: x['created_at'], reverse=True)
     
+    def filter_relevant_tweets(self, tweets):
+        """山田太郎議員関連キーワードでツイートをフィルタリング"""
+        yamada_keywords = [
+            '山田太郎', '表現の自由', '著作権', 'クリエイター', 'DX', 'デジタル',
+            '児童ポルノ', '児ポ', '非実在', '表現規制', 'CODA', 'TPP',
+            'コンテンツ', 'アニメ', 'マンガ', 'ゲーム', '同人', 'オタク',
+            'IT政策', 'デジタル庁', 'マイナンバー', 'サイバー', 'AI規制',
+            '参議院', '自民党', '政治', '議員', '政策', '法案'
+        ]
+        
+        relevant_tweets = []
+        for tweet in tweets:
+            text = tweet['text'].lower()
+            # キーワードマッチング
+            if any(keyword.lower() in text for keyword in yamada_keywords):
+                tweet['relevance_score'] = sum(1 for keyword in yamada_keywords if keyword.lower() in text)
+                relevant_tweets.append(tweet)
+        
+        # 関連度順にソート
+        relevant_tweets.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+        
+        # 関連ツイートがない場合は元のリストを返す
+        return relevant_tweets if relevant_tweets else tweets
+
     def analyze_tweets_with_ai(self, tweets):
         """AIでツイートを分析・要約"""
         if not tweets:
             return "本日はバイラルツイートはありませんでした。"
         
+        # 関連ツイートをフィルタリング
+        filtered_tweets = self.filter_relevant_tweets(tweets)
+        
         # ツイート内容を整理
         tweet_texts = []
-        for tweet in tweets[:20]:  # 上位20件を分析
-            tweet_texts.append(f"@{tweet['username']}: {tweet['text']} (👍{tweet['likes']} 🔄{tweet['retweets']})")
+        for tweet in filtered_tweets[:20]:  # 上位20件を分析
+            relevance = f"(関連度: {tweet.get('relevance_score', 0)})" if 'relevance_score' in tweet else ""
+            tweet_texts.append(f"@{tweet['username']}: {tweet['text']} (👍{tweet['likes']} 🔄{tweet['retweets']}) {relevance}")
         
-        prompt = f"""以下は山田太郎議員の支援者による本日のバイラルツイートです。
-これらのツイートを分析し、以下の観点で日本語でまとめてください：
+        prompt = f"""以下は山田太郎議員に関連するバイラルツイートです。
+山田太郎議員の政策テーマ（表現の自由、著作権、デジタル政策、クリエイター支援など）に関連する内容を中心に分析してください。
 
-1. 主要なトピック・テーマ
-2. 支援者の関心事
-3. 特に注目すべきツイート（3-5件）
-4. 全体的な傾向
+分析観点：
+1. 🎯 山田太郎議員の政策に関連する主要トピック
+2. 📈 支援者の関心事・トレンド
+3. ⭐ 特に注目すべき関連ツイート（3-5件）
+4. 📊 全体的な傾向と政策への影響
 
 ツイート一覧：
 {chr(10).join(tweet_texts)}
@@ -114,26 +143,37 @@ class TwitterSupporterAnalyzer:
         
         print(f"{len(viral_tweets)}件のバイラルツイートを発見")
         
+        # 関連ツイートをフィルタリング
+        relevant_tweets = self.filter_relevant_tweets(viral_tweets)
+        print(f"山田太郎議員関連: {len(relevant_tweets)}件")
+        
         print("AI分析を実行中...")
         analysis = self.analyze_tweets_with_ai(viral_tweets)
         
         # レポート生成
         report_date = datetime.now().strftime('%Y-%m-%d')
-        report_content = f"""# 山田太郎議員支援者ツイート分析レポート
+        report_content = f"""# 山田太郎議員関連ツイート分析レポート
 ## {report_date}
+
+### 📊 サマリー
+- 🔍 バイラルツイート総数: {len(viral_tweets)}件
+- 🎯 関連ツイート: {len(relevant_tweets)}件
+- 📈 関連度の高いツイートを優先表示
 
 {analysis}
 
-## 詳細データ
+## 🔥 関連度の高いバイラルツイート（詳細）
 """
         
-        # 詳細ツイート情報を追加
-        for tweet in viral_tweets[:10]:
+        # 関連度の高いツイートを優先表示
+        display_tweets = relevant_tweets[:10] if relevant_tweets else viral_tweets[:10]
+        for tweet in display_tweets:
+            relevance_info = f"- **🎯 関連度**: {tweet.get('relevance_score', 0)}点\n" if 'relevance_score' in tweet else ""
             report_content += f"""
 ### [{tweet['account_name']}](https://twitter.com/{tweet['username']})
 - **ツイート**: {tweet['text']}
 - **エンゲージメント**: 👍{tweet['likes']} 🔄{tweet['retweets']} 💬{tweet['replies']}
-- **URL**: {tweet['url']}
+{relevance_info}- **URL**: {tweet['url']}
 - **投稿時刻**: {tweet['created_at']}
 
 ---
