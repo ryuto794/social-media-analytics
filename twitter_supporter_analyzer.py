@@ -32,58 +32,58 @@ class TwitterSupporterAnalyzer:
     
     def search_keyword_tweets(self, days_back=3):
         """キーワード検索でツイートを収集"""
-        end_time = datetime.now()
+        end_time = datetime.now() - timedelta(seconds=30)  # 30秒前に設定
         start_time = end_time - timedelta(days=days_back)
         
         search_keywords = [
             '山田太郎 議員',
-            '山田太郎 参議院', 
-            '表現の自由 山田',
-            '著作権 山田太郎',
-            'クリエイター 山田太郎',
-            'DX 山田太郎',
-            '非実在 山田太郎',
-            '児ポ 山田太郎'
+            '表現の自由 山田太郎'
         ]
         
         viral_tweets = []
         
-        for keyword in search_keywords:
+        for i, keyword in enumerate(search_keywords):
             try:
                 print(f"検索中: {keyword}")
-                # キーワード検索
-                tweets = tweepy.Paginator(
-                    self.twitter_client.search_recent_tweets,
-                    query=f'"{keyword}" -is:retweet lang:ja',
-                    start_time=start_time,
-                    end_time=end_time,
+                
+                # API制限を避けるため間隔を空ける
+                if i > 0:
+                    import time
+                    time.sleep(5)
+                
+                # キーワード検索（より簡単なクエリ）
+                tweets = self.twitter_client.search_recent_tweets(
+                    query=f'{keyword} -is:retweet lang:ja',
                     tweet_fields=['public_metrics', 'created_at', 'author_id'],
                     user_fields=['username', 'name'],
                     expansions=['author_id'],
                     max_results=10
-                ).flatten(limit=50)
+                )
                 
-                for tweet in tweets:
-                    metrics = tweet.public_metrics
-                    # 注目ツイート判定（いいね2以上 または RT1以上）
-                    if metrics['like_count'] >= 2 or metrics['retweet_count'] >= 1:
-                        # ユーザー情報を取得
-                        user = next((user for user in tweets.includes['users'] if user.id == tweet.author_id), None)
-                        username = user.username if user else 'unknown'
-                        name = user.name if user else 'Unknown User'
-                        
-                        viral_tweets.append({
-                            'account_name': name,
-                            'username': username,
-                            'tweet_id': tweet.id,
-                            'text': tweet.text,
-                            'created_at': tweet.created_at,
-                            'likes': metrics['like_count'],
-                            'retweets': metrics['retweet_count'],
-                            'replies': metrics['reply_count'],
-                            'url': f"https://twitter.com/{username}/status/{tweet.id}",
-                            'search_keyword': keyword
-                        })
+                if tweets.data:
+                    for tweet in tweets.data:
+                        metrics = tweet.public_metrics
+                        # 注目ツイート判定（いいね1以上 または RT1以上）
+                        if metrics['like_count'] >= 1 or metrics['retweet_count'] >= 1:
+                            # ユーザー情報を取得
+                            user = None
+                            if tweets.includes and 'users' in tweets.includes:
+                                user = next((user for user in tweets.includes['users'] if user.id == tweet.author_id), None)
+                            username = user.username if user else 'unknown'
+                            name = user.name if user else 'Unknown User'
+                            
+                            viral_tweets.append({
+                                'account_name': name,
+                                'username': username,
+                                'tweet_id': tweet.id,
+                                'text': tweet.text,
+                                'created_at': tweet.created_at,
+                                'likes': metrics['like_count'],
+                                'retweets': metrics['retweet_count'],
+                                'replies': metrics['reply_count'],
+                                'url': f"https://twitter.com/{username}/status/{tweet.id}",
+                                'search_keyword': keyword
+                            })
                         
             except Exception as e:
                 print(f"Error searching for {keyword}: {e}")
