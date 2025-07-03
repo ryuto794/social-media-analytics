@@ -30,6 +30,45 @@ class TwitterSupporterAnalyzer:
         except FileNotFoundError:
             return []
     
+    def get_active_followers(self, user_id="362083895", limit=50):
+        """山田太郎議員のフォロワーから活発なアカウントを取得"""
+        try:
+            print("山田太郎議員のフォロワーを取得中...")
+            
+            # フォロワー取得
+            followers = tweepy.Paginator(
+                self.twitter_client.get_users_followers,
+                id=user_id,
+                user_fields=['username', 'name', 'public_metrics', 'verified'],
+                max_results=100
+            ).flatten(limit=limit)
+            
+            active_supporters = []
+            for user in followers:
+                metrics = user.public_metrics
+                # 活発なアカウントの条件
+                if (metrics['followers_count'] >= 100 and 
+                    metrics['following_count'] >= 50 and 
+                    metrics['tweet_count'] >= 100):
+                    
+                    active_supporters.append({
+                        'name': user.name,
+                        'username': user.username,
+                        'user_id': str(user.id),
+                        'followers': metrics['followers_count'],
+                        'description': '自動検出された支援者'
+                    })
+            
+            # フォロワー数順にソート
+            active_supporters.sort(key=lambda x: x['followers'], reverse=True)
+            print(f"活発な支援者 {len(active_supporters)}名を発見")
+            
+            return active_supporters[:20]  # 上位20名を返す
+            
+        except Exception as e:
+            print(f"フォロワー取得エラー: {e}")
+            return []
+
     def search_keyword_tweets(self, days_back=3):
         """キーワード検索でツイートを収集"""
         end_time = datetime.now() - timedelta(seconds=30)  # 30秒前に設定
@@ -101,31 +140,43 @@ class TwitterSupporterAnalyzer:
         return sorted(unique_tweets, key=lambda x: x['likes'] + x['retweets'], reverse=True)
 
     def get_viral_tweets(self, days_back=7):
-        """従来の方法（アカウント指定）とキーワード検索を併用"""
+        """フォロワー自動検出と既存アカウントからツイート収集"""
         viral_tweets = []
+        all_accounts = []
         
-        # 1. キーワード検索でツイート収集
-        keyword_tweets = self.search_keyword_tweets(days_back=3)
-        viral_tweets.extend(keyword_tweets)
+        # 1. 既存の指定アカウント
+        all_accounts.extend(self.supporter_accounts)
         
-        # 2. 指定アカウントからも収集（従来の方法）
-        end_time = datetime.now()
+        # 2. 自動検出された活発なフォロワー
+        auto_followers = self.get_active_followers(limit=30)
+        all_accounts.extend(auto_followers)
+        
+        print(f"監視対象アカウント: {len(all_accounts)}名")
+        
+        # 3. 各アカウントからツイート収集
+        end_time = datetime.now() - timedelta(seconds=30)
         start_time = end_time - timedelta(days=days_back)
         
-        for account in self.supporter_accounts:
+        for i, account in enumerate(all_accounts):
             try:
+                # API制限回避のため間隔を空ける
+                if i > 0 and i % 5 == 0:
+                    import time
+                    time.sleep(2)
+                
                 tweets = self.twitter_client.get_users_tweets(
                     id=account['user_id'],
                     start_time=start_time,
                     end_time=end_time,
                     tweet_fields=['public_metrics', 'created_at', 'author_id'],
-                    max_results=50
+                    max_results=10  # 少なめに設定
                 )
                 
                 if tweets.data:
                     for tweet in tweets.data:
                         metrics = tweet.public_metrics
-                        if metrics['like_count'] >= 1 or metrics['retweet_count'] >= 1:
+                        # より緩い条件でツイートを拾う
+                        if metrics['like_count'] >= 1 or metrics['retweet_count'] >= 1 or metrics['reply_count'] >= 2:
                             viral_tweets.append({
                                 'account_name': account['name'],
                                 'username': account['username'],
@@ -136,7 +187,7 @@ class TwitterSupporterAnalyzer:
                                 'retweets': metrics['retweet_count'],
                                 'replies': metrics['reply_count'],
                                 'url': f"https://twitter.com/{account['username']}/status/{tweet.id}",
-                                'search_keyword': '指定アカウント'
+                                'search_keyword': '自動検出フォロワー' if 'description' in account and '自動検出' in account['description'] else '指定アカウント'
                             })
                         
             except Exception as e:
@@ -151,8 +202,8 @@ class TwitterSupporterAnalyzer:
                 seen_ids.add(tweet['tweet_id'])
                 unique_tweets.append(tweet)
         
-        # 最新の投稿順にソート
-        return sorted(unique_tweets, key=lambda x: x['created_at'], reverse=True)
+        # エンゲージメント順にソート
+        return sorted(unique_tweets, key=lambda x: x['likes'] + x['retweets'], reverse=True)
     
     def filter_relevant_tweets(self, tweets):
         """山田太郎議員関連キーワードでツイートをフィルタリング"""
@@ -234,7 +285,7 @@ class TwitterSupporterAnalyzer:
     
     def generate_report(self):
         """レポートを生成"""
-        print("キーワード検索でツイートを収集中...")
+        print("フォロワー自動検出でツイートを収集中...")
         viral_tweets = self.get_viral_tweets()
         
         print(f"{len(viral_tweets)}件のツイートを発見")
