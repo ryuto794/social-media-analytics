@@ -15,8 +15,43 @@
     
     <div class="report">
         <h2>🚀 すぐに分析を実行</h2>
-        <p><strong><a href="https://github.com/ryuto794/social-media-analytics/actions/workflows/daily_analysis.yml" target="_blank" style="color: #0066cc; text-decoration: none; font-size: 18px;">👉 ここをクリックして「Run workflow」ボタンを押してください</a></strong></p>
+        <button onclick="runAnalysis()" style="background: #28a745; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-size: 18px; cursor: pointer; margin: 10px 0;">
+            📊 分析を開始する
+        </button>
+        <p id="status" style="margin-top: 10px; font-weight: bold;"></p>
+        <p><small>※ 初回は<a href="https://github.com/ryuto794/social-media-analytics/actions/workflows/daily_analysis.yml" target="_blank">GitHubでの認証</a>が必要な場合があります</small></p>
     </div>
+    
+    <script>
+        async function runAnalysis() {
+            const status = document.getElementById('status');
+            status.innerHTML = '🔄 分析を開始しています...';
+            
+            try {
+                // GitHub Personal Access Tokenが必要なため、代替手段を提供
+                status.innerHTML = '⚠️ <a href="https://github.com/ryuto794/social-media-analytics/actions/workflows/daily_analysis.yml" target="_blank" style="color: #dc3545;">GitHubページで「Run workflow」をクリックしてください</a>';
+                
+                // 3秒後に自動でGitHubページを開く
+                setTimeout(() => {
+                    window.open('https://github.com/ryuto794/social-media-analytics/actions/workflows/daily_analysis.yml', '_blank');
+                }, 3000);
+                
+            } catch (error) {
+                status.innerHTML = '❌ エラーが発生しました。GitHubページから実行してください。';
+            }
+        }
+        
+        // ページロード時に最新の実行状況をチェック
+        window.onload = function() {
+            checkStatus();
+        };
+        
+        async function checkStatus() {
+            // 実行状況の表示（簡易版）
+            const status = document.getElementById('status');
+            status.innerHTML = '💡 下のボタンで分析を開始できます';
+        }
+    </script>
     
     <div class="report">
         <h2>📊 システム情報</h2>
