@@ -39,11 +39,20 @@ jobs:
     - name: Create reports directory
       run: mkdir -p reports
       
-    - name: Run analysis
+    - name: Run analysis (API版)
       env:
         TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: python twitter_supporter_analyzer.py
+      continue-on-error: true
+      
+    - name: Run analysis (Twikit版)
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
+        TWITTER_EMAIL: ${{ secrets.TWITTER_EMAIL }}
+        TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
+      run: python twitter_twikit_analyzer.py
       
     - name: Update index page
       run: |

@@ -1,3 +1,4 @@
 tweepy>=4.14.0
 openai>=1.0.0
 markdown>=3.5.0
+twikit
