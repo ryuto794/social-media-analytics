@@ -30,7 +30,7 @@ class TwitterSupporterAnalyzer:
         except FileNotFoundError:
             return []
     
-    def get_viral_tweets(self, days_back=1):
+    def get_viral_tweets(self, days_back=3):
         """バイラルツイートを収集"""
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days_back)
@@ -39,20 +39,18 @@ class TwitterSupporterAnalyzer:
         
         for account in self.supporter_accounts:
             try:
-                # ユーザーのツイートを取得
+                # ユーザーのツイートを取得（制限回避のため少なめに）
                 tweets = tweepy.Paginator(
                     self.twitter_client.get_users_tweets,
                     id=account['user_id'],
-                    start_time=start_time,
-                    end_time=end_time,
                     tweet_fields=['public_metrics', 'created_at', 'author_id'],
-                    max_results=100
-                ).flatten(limit=100)
+                    max_results=10
+                ).flatten(limit=50)
                 
                 for tweet in tweets:
                     metrics = tweet.public_metrics
-                    # バイラル判定（いいね50以上 または RT20以上）
-                    if metrics['like_count'] >= 50 or metrics['retweet_count'] >= 20:
+                    # バイラル判定（いいね10以上 または RT5以上）
+                    if metrics['like_count'] >= 10 or metrics['retweet_count'] >= 5:
                         viral_tweets.append({
                             'account_name': account['name'],
                             'username': account['username'],
