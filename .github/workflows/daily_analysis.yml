@@ -1,9 +1,7 @@
 name: Daily Twitter Analysis
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'  # 3時間ごとに実行
-  workflow_dispatch:  # 手動実行ボタン
+  workflow_dispatch:  # 手動実行のみ
     inputs:
       message:
         description: '実行理由（任意）'
