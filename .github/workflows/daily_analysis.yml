@@ -1,0 +1,50 @@
+name: Daily Twitter Analysis
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 毎日午前6時（JST）に実行
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install tweepy openai markdown
+        
+    - name: Create reports directory
+      run: mkdir -p reports
+      
+    - name: Run analysis
+      env:
+        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: python twitter_supporter_analyzer.py
+      
+    - name: Update index page
+      run: |
+        echo "# 山田太郎議員支援者ツイート分析" > index.md
+        echo "" >> index.md
+        echo "## 最新レポート" >> index.md
+        echo "" >> index.md
+        ls -t reports/*.md | head -10 | while read file; do
+          date=$(basename "$file" .md | sed 's/report_//')
+          echo "- [$date]($file)" >> index.md
+        done
+        
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./
+        publish_branch: gh-pages
