@@ -33,14 +33,18 @@ jobs:
       
     - name: Update index page
       run: |
-        echo "# 山田太郎議員支援者ツイート分析" > index.md
+        echo "# ソーシャルメディア分析" > index.md
         echo "" >> index.md
         echo "## 最新レポート" >> index.md
         echo "" >> index.md
-        ls -t reports/*.md | head -10 | while read file; do
-          date=$(basename "$file" .md | sed 's/report_//')
-          echo "- [$date]($file)" >> index.md
-        done
+        if ls reports/*.md 1> /dev/null 2>&1; then
+          ls -t reports/*.md | head -10 | while read file; do
+            date=$(basename "$file" .md | sed 's/report_//')
+            echo "- [$date]($file)" >> index.md
+          done
+        else
+          echo "レポートを生成中..." >> index.md
+        fi
         
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
